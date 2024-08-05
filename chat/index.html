@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <title>WebRTC Chat</title>
+    <style>
+      #messages {
+        /*메시지 표시 칸*/
+        height: 300px;
+        overflow-y: scroll;
+        border: 1px solid #f3efef;
+        margin-bottom: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <style>
+      /* 메시지 표시 영역*/
+      #messages {
+        height: 300px;
+        overflow-y: scroll;
+        border: 1px solid #ffffff;
+        border-radius: 10px;
+        margin-bottom: 15px;
+        padding: 15px;
+        background-color: #ffffff;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        font-family: "Arial", sans-serif;
+        color: #4a4a4a;
+      }
+
+      /* 메시지 항목*/
+      #messages div {
+        margin: 5px 0;
+        padding: 10px;
+        border-radius: 5px;
+        background-color: #f8f6f4;
+        word-wrap: break-word;
+      }
+
+      /* 입력창 */
+      #messageInput {
+        width: calc(100% - 120px);
+        padding: 12px;
+        border: 1px solid #f5f4f2;
+        border-radius: 5px;
+        margin-right: 10px;
+        font-size: 16px;
+        box-shadow: 0 2px 5px rgba(242, 239, 239, 0.1);
+        background-color: #fff;
+      }
+
+      /* 전송 버튼 */
+      #sendButton {
+        padding: 12px 18px;
+        background-color: #eeeae8;
+        color: rgb(0, 0, 0);
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 16px;
+        transition: background-color 0.3s, transform 0.2s;
+      }
+
+      /*호버 효과 */
+      #sendButton:hover {
+        background-color: #e0e2e8;
+        transform: scale(1.05);
+      }
+    </style>
+
+    <div id="messages"></div>
+    <!-- 메시지 표시 영역 -->
+    <input type="text" id="messageInput" placeholder="메시지를 입력하세요" />
+    <!-- 메시지 입력창 -->
+    <button id="sendButton">전송</button>
+    <!-- 전송 버튼 -->
+
+    <script src="/socket.io/socket.io.js"></script>
+
+    <script>
+      // 클라이언트 측 코드
+      const socket = io("http://localhost:3000");
+      const messagesDiv = document.getElementById("messages"); // 메시지 표시 영역
+      const messageInput = document.getElementById("messageInput"); // 입력창
+      const sendButton = document.getElementById("sendButton"); // 전송 버튼
+      const roomName = "chatRoom"; // 방 이름 설정
+
+      // 방에 접속
+      socket.emit("join", roomName);
+
+      // 신호 메시지 수신
+      socket.on("signal", (data) => {
+        if (data.id !== socket.id) {
+          // 다른 사용자의 신호인지 확인
+          if (!remotePeerConnection) {
+            // 원격 PeerConnection이 없으면 생성
+            createPeerConnection();
+          }
+          remotePeerConnection.signal(data.signal); // 신호 처리
+        }
+      });
+
+      // P2P 연결 생성
+      const createPeerConnection = () => {
+        localPeerConnection = new SimplePeer({
+          initiator: true,
+          trickle: false,
+        });
+        remotePeerConnection = new SimplePeer({ trickle: false });
+
+        // 신호 발생 시 서버로 전송
+        localPeerConnection.on("signal", (signal) => {
+          socket.emit("signal", { signal, room: roomName }); // 신호를 서버로 전송
+        });
+
+        // 로컬 PeerConnection에서 데이터 수신
+        localPeerConnection.on("data", (data) => {
+          messagesDiv.innerHTML += `<div>${data}</div>`;
+          messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        });
+
+        // 원격 PeerConnection에서 데이터 수신
+        remotePeerConnection.on("data", (data) => {
+          messagesDiv.innerHTML += `<div>${data}</div>`;
+          messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        });
+
+        // 원격 PeerConnection에서 신호 수신
+        remotePeerConnection.on("signal", (signal) => {
+          localPeerConnection.signal(signal); // 로컬 PeerConnection에 신호 전달
+        });
+      };
+
+      // 메시지 전송
+      sendButton.addEventListener("click", () => {
+        const message = messageInput.value; // 입력된 메시지 가져오기
+        if (message) {
+          // 메시지가 비어 있지 않으면
+          localPeerConnection.send(message); // 메시지 전송
+          messageInput.value = ""; // 입력창 초기화
+        }
+      });
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/simple-peer/simplepeer.min.js"></script>
+    <!-- SimplePeer 라이브러리(P2P연결) -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/chat/js/chat.js"></script>
+    <script src="/chat/js/main.js"></script>
+  </body>
+</html>
