@@ -3,149 +3,182 @@
   <head>
     <meta charset="UTF-8" />
     <title>WebRTC Chat</title>
+    <script src="/socket.io/socket.io.js"></script>
     <style>
-      #messages {
-        /*메시지 표시 칸*/
-        height: 300px;
-        overflow-y: scroll;
-        border: 1px solid #f3efef;
-        margin-bottom: 10px;
+      /* 기본 스타일 설정 */
+      body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        font-family: "Arial", sans-serif;
+        background-color: #f7f7f7;
+        margin: 0;
+        height: 100vh;
+        padding: 20px;
       }
-    </style>
-  </head>
-  <body>
-    <style>
-      /* 메시지 표시 영역*/
       #messages {
-        height: 300px;
-        overflow-y: scroll;
-        border: 1px solid #ffffff;
-        border-radius: 10px;
+        height: 400px; /* 메시지 표시 영역의 높이 설정 */
+        overflow-y: scroll; /* 스크롤 가능 */
+        border-radius: 20px;
         margin-bottom: 15px;
         padding: 15px;
         background-color: #ffffff;
-        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-        font-family: "Arial", sans-serif;
-        color: #4a4a4a;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        width: 100%;
+        max-width: 500px; /* 최대 너비 설정 */
+        display: flex;
+        flex-direction: column; /* 메시지를 위에서 아래로 쌓기 */
+        gap: 10px; /* 메시지 간 간격 */
       }
-
-      /* 메시지 항목*/
-      #messages div {
-        margin: 5px 0;
+      .message {
         padding: 10px;
-        border-radius: 5px;
-        background-color: #f8f6f4;
-        word-wrap: break-word;
+        border-radius: 15px;
+        word-wrap: break-word; /* 긴 단어가 줄 바꿈됨 */
+        max-width: 80%;
+        clear: both;
+        font-size: 16px;
+        line-height: 1.4;
       }
-
-      /* 입력창 */
+      .message.user {
+        background-color: #c6e0f8; /* 사용자 메시지 배경색 */
+        align-self: flex-end; /* 오른쪽 정렬 */
+        border: 1px solid #a4cce6;
+      }
+      .message.remote {
+        background-color: #ffffff; /* 원격 메시지 배경색 */
+        align-self: flex-start; /* 왼쪽 정렬 */
+        border: 1px solid #eaeaea;
+      }
+      .input-container {
+        display: flex;
+        justify-content: center;
+        margin-top: 10px;
+        width: 100%;
+        max-width: 500px; /* 입력 영역 최대 너비 설정 */
+      }
       #messageInput {
-        width: calc(100% - 120px);
+        width: calc(100% - 120px); /* 버튼을 제외한 입력 필드 너비 */
         padding: 12px;
         border: 1px solid #f5f4f2;
-        border-radius: 5px;
+        border-radius: 25px;
         margin-right: 10px;
         font-size: 16px;
         box-shadow: 0 2px 5px rgba(242, 239, 239, 0.1);
         background-color: #fff;
+        outline: none;
+        transition: border 0.3s; /* 포커스 시 경계선 변화 효과 */
       }
-
-      /* 전송 버튼 */
+      #messageInput:focus {
+        border: 1px solid #4c6aaf; /* 포커스 시 경계선 색상 변경 */
+      }
+      /* 전송 버튼 스타일 */
       #sendButton {
         padding: 12px 18px;
-        background-color: #eeeae8;
-        color: rgb(0, 0, 0);
+        background-color: #4c7faf; /* 버튼 배경색 */
+        color: white; /* 버튼 글자색 */
         border: none;
-        border-radius: 5px;
-        cursor: pointer;
+        border-radius: 25px;
+        cursor: pointer; /* 커서 포인터로 변경 */
         font-size: 16px;
-        transition: background-color 0.3s, transform 0.2s;
+        transition: background-color 0.3s, transform 0.2s; /* 호버 효과 */
       }
-
-      /*호버 효과 */
       #sendButton:hover {
-        background-color: #e0e2e8;
-        transform: scale(1.05);
+        background-color: #4556a0; /* 호버 시 버튼 색상 변경 */
+        transform: scale(1.05); /* 호버 시 크기 확대 */
       }
     </style>
-
+  </head>
+  <body>
     <div id="messages"></div>
-    <!-- 메시지 표시 영역 -->
-    <input type="text" id="messageInput" placeholder="메시지를 입력하세요" />
-    <!-- 메시지 입력창 -->
-    <button id="sendButton">전송</button>
-    <!-- 전송 버튼 -->
-
-    <script src="/socket.io/socket.io.js"></script>
-
+    <!-- 메시지를 표시할 영역 -->
+    <div class="input-container">
+      <input type="text" id="messageInput" placeholder="메시지를 입력하세요" />
+      <!-- 메시지 입력 필드 -->
+      <button id="sendButton">전송</button>
+      <!-- 전송 버튼 -->
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/simple-peer/simplepeer.min.js"></script>
     <script>
-      // 클라이언트 측 코드
-      const socket = io("http://localhost:3000");
-      const messagesDiv = document.getElementById("messages"); // 메시지 표시 영역
-      const messageInput = document.getElementById("messageInput"); // 입력창
-      const sendButton = document.getElementById("sendButton"); // 전송 버튼
+      const socket = io(); // Socket.IO 클라이언트 초기화
+      const messagesDiv = document.getElementById("messages"); // 메시지 표시 영역 선택
+      const messageInput = document.getElementById("messageInput"); // 입력 필드 선택
+      const sendButton = document.getElementById("sendButton"); // 전송 버튼 선택
       const roomName = "chatRoom"; // 방 이름 설정
 
-      // 방에 접속
-      socket.emit("join", roomName);
+      let localPeerConnection; // 로컬 피어 연결
+      let remotePeerConnection; // 원격 피어 연결
 
-      // 신호 메시지 수신
+      socket.emit("join", roomName); // 방에 참여 요청
+
       socket.on("signal", (data) => {
+        // 신호 수신 시 처리
         if (data.id !== socket.id) {
-          // 다른 사용자의 신호인지 확인
+          // 자신이 보낸 신호가 아닐 경우
           if (!remotePeerConnection) {
-            // 원격 PeerConnection이 없으면 생성
-            createPeerConnection();
+            initializePeerConnection(); // 피어 연결 초기화
           }
-          remotePeerConnection.signal(data.signal); // 신호 처리
+          remotePeerConnection.signal(data.signal); // 신호 전달
         }
       });
 
-      // P2P 연결 생성
-      const createPeerConnection = () => {
+      function initializePeerConnection() {
+        // 피어 연결 초기화 함수
         localPeerConnection = new SimplePeer({
-          initiator: true,
+          initiator: true, // initiator 설정
           trickle: false,
         });
         remotePeerConnection = new SimplePeer({ trickle: false });
 
-        // 신호 발생 시 서버로 전송
         localPeerConnection.on("signal", (signal) => {
-          socket.emit("signal", { signal, room: roomName }); // 신호를 서버로 전송
+          socket.emit("signal", { signal, room: roomName }); // 신호 전송
         });
 
-        // 로컬 PeerConnection에서 데이터 수신
+        localPeerConnection.on("connect", () => {
+          console.log("Data channel is connected"); // 데이터 채널 연결 성공
+        });
+
         localPeerConnection.on("data", (data) => {
-          messagesDiv.innerHTML += `<div>${data}</div>`;
-          messagesDiv.scrollTop = messagesDiv.scrollHeight;
+          appendMessage(data, "remote"); // 원격 메시지 추가
         });
 
-        // 원격 PeerConnection에서 데이터 수신
         remotePeerConnection.on("data", (data) => {
-          messagesDiv.innerHTML += `<div>${data}</div>`;
-          messagesDiv.scrollTop = messagesDiv.scrollHeight;
+          appendMessage(data, "user"); // 사용자 메시지 추가
         });
 
-        // 원격 PeerConnection에서 신호 수신
         remotePeerConnection.on("signal", (signal) => {
-          localPeerConnection.signal(signal); // 로컬 PeerConnection에 신호 전달
+          localPeerConnection.signal(signal); // 신호 전달
         });
-      };
+      }
 
-      // 메시지 전송
+      function appendMessage(message, type) {
+        // 메시지 추가 함수
+        const messageDiv = document.createElement("div");
+        messageDiv.className = `message ${type}`; // 메시지 유형에 따라 클래스 설정
+        messageDiv.innerText = message; // 메시지 내용 설정
+        messagesDiv.appendChild(messageDiv); // 메시지 영역에 추가
+        messagesDiv.scrollTop = messagesDiv.scrollHeight; // 스크롤을 맨 아래로 이동
+      }
+
       sendButton.addEventListener("click", () => {
+        // 전송 버튼 클릭 이벤트 핸들러
         const message = messageInput.value; // 입력된 메시지 가져오기
         if (message) {
-          // 메시지가 비어 있지 않으면
-          localPeerConnection.send(message); // 메시지 전송
-          messageInput.value = ""; // 입력창 초기화
+          if (!localPeerConnection) {
+            initializePeerConnection(); // 피어 연결 초기화
+          }
+          if (
+            localPeerConnection &&
+            localPeerConnection.readyState === "open"
+          ) {
+            localPeerConnection.send(message); // 메시지 전송
+            appendMessage(message, "user"); // 사용자 메시지 추가
+            messageInput.value = ""; // 입력 필드 초기화
+          } else {
+            console.error("Data channel is not open yet."); // 데이터 채널이 열리지 않았을 경우 에러 출력
+          }
         }
       });
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/simple-peer/simplepeer.min.js"></script>
-    <!-- SimplePeer 라이브러리(P2P연결) -->
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="/chat/js/chat.js"></script>
-    <script src="/chat/js/main.js"></script>
   </body>
 </html>
